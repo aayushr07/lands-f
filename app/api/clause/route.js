@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-const GEMINI_API_KEY = process.env.GEMINI_API || "";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_API_K = process.env.GEMINI_API || "";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_K}`;
 
 const JSON_SCHEMA = `{
   "summary": "Plain English summary of the entire document in 3-5 sentences. Use simple language a 16-year-old can understand.",
