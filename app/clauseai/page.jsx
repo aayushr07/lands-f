@@ -2,65 +2,27 @@
 
 import { useState, useRef, useCallback } from "react";
 
-// ─── Gemini API helper ────────────────────────────────────────────────────────
-const GEMINI_API_KEY = process.env.GEMINI_API || "";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-async function analyzeDocumentWithGemini(text) {
-  const prompt = `
-You are a legal expert AI assistant helping everyday people understand contracts and legal documents. Analyze the following document and respond ONLY with valid JSON (no markdown, no backticks, no explanation outside JSON).
-
-Document:
-"""
-${text}
-"""
-
-Return this exact JSON structure:
-{
-  "summary": "Plain English summary of the entire document in 3-5 sentences. Use simple language a 16-year-old can understand.",
-  "documentType": "Type of document (e.g. Employment Contract, Rental Agreement, Terms of Service, NDA, etc.)",
-  "riskScore": <number from 0 to 100 indicating overall risk level>,
-  "riskLabel": "Low | Medium | High | Critical",
-  "clauses": [
-    {
-      "id": "c1",
-      "title": "Short clause name",
-      "originalText": "The exact problematic text from the document (keep it short, max 2 sentences)",
-      "plainMeaning": "What this clause actually means in plain English",
-      "isHarmful": true or false,
-      "harmLevel": "Low | Medium | High | Critical",
-      "harmReason": "Why this clause is problematic or risky for the user",
-      "legalSolution": "Specific replacement text or negotiation advice the user can actually use",
-      "canBeReplaced": true or false,
-      "replacementSuggestion": "A fair alternative clause text they could propose"
-    }
-  ],
-  "userRights": ["Right 1 the user should know about", "Right 2", "Right 3"],
-  "redFlags": ["Major concern 1", "Major concern 2"],
-  "negotiationTips": ["Tip 1 on how to negotiate this document", "Tip 2"]
-}
-`;
-
-  const body = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
-  };
-
-  const res = await fetch(GEMINI_URL, {
+// ─── Internal API helper (calls our Next.js route, not Gemini directly) ───────
+async function analyzeDocumentWithText(text) {
+  const res = await fetch("/api/clause", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ mode: "paste", text }),
   });
-
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err?.error?.message || "Gemini API error");
-  }
-
   const data = await res.json();
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  const cleaned = raw.replace(/```json|```/g, "").trim();
-  return JSON.parse(cleaned);
+  if (!res.ok) throw new Error(data.error || "Analysis failed");
+  return data;
+}
+
+async function analyzeDocumentWithFile(base64, mimeType) {
+  const res = await fetch("/api/clause", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: "vision", base64, mimeType }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Analysis failed");
+  return data;
 }
 
 async function extractFileAsBase64(file) {
@@ -81,13 +43,6 @@ const riskColors = {
   Medium:   { bg: "#fffbeb", text: "#92600a", border: "#f5cc7a" },
   High:     { bg: "#fff5f0", text: "#b84a2e", border: "#f0b09a" },
   Critical: { bg: "#fdf0f5", text: "#8b1a4a", border: "#e8a0c0" },
-};
-
-const riskBarColor = {
-  Low: "#3aad4f",
-  Medium: "#d4930a",
-  High: "#c05030",
-  Critical: "#8b1a4a",
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -270,63 +225,15 @@ export default function ClauseAIPage() {
     }, 1800);
 
     try {
-      const visionPrompt = `
-You are a legal expert AI assistant helping everyday people understand contracts and legal documents. Analyze the document in this file and respond ONLY with valid JSON (no markdown, no backticks, no explanation outside JSON).
-
-Return this exact JSON structure:
-{
-  "summary": "Plain English summary of the entire document in 3-5 sentences. Use simple language a 16-year-old can understand.",
-  "documentType": "Type of document (e.g. Employment Contract, Rental Agreement, Terms of Service, NDA, etc.)",
-  "riskScore": <number from 0 to 100 indicating overall risk level>,
-  "riskLabel": "Low | Medium | High | Critical",
-  "clauses": [
-    {
-      "id": "c1",
-      "title": "Short clause name",
-      "originalText": "The exact problematic text from the document (keep it short, max 2 sentences)",
-      "plainMeaning": "What this clause actually means in plain English",
-      "isHarmful": true or false,
-      "harmLevel": "Low | Medium | High | Critical",
-      "harmReason": "Why this clause is problematic or risky for the user",
-      "legalSolution": "Specific replacement text or negotiation advice the user can actually use",
-      "canBeReplaced": true or false,
-      "replacementSuggestion": "A fair alternative clause text they could propose"
-    }
-  ],
-  "userRights": ["Right 1 the user should know about", "Right 2", "Right 3"],
-  "redFlags": ["Major concern 1", "Major concern 2"],
-  "negotiationTips": ["Tip 1 on how to negotiate this document", "Tip 2"]
-}`;
-
       if (inputMode === "paste") {
         if (!pasteText.trim()) throw new Error("Please paste some document text.");
-        const analysis = await analyzeDocumentWithGemini(pasteText);
+        const analysis = await analyzeDocumentWithText(pasteText);
         setResult(analysis);
       } else {
         if (!file) throw new Error("Please upload a photo or PDF first.");
         const { base64, mimeType } = await extractFileAsBase64(file);
-        const body = {
-          contents: [{
-            parts: [
-              { inline_data: { mime_type: mimeType, data: base64 } },
-              { text: visionPrompt }
-            ]
-          }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
-        };
-        const res = await fetch(GEMINI_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          const e = await res.json();
-          throw new Error(e?.error?.message || "Gemini vision analysis failed");
-        }
-        const data = await res.json();
-        const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const cleaned = raw.replace(/```json|```/g, "").trim();
-        setResult(JSON.parse(cleaned));
+        const analysis = await analyzeDocumentWithFile(base64, mimeType);
+        setResult(analysis);
       }
     } catch (e) {
       setError(e.message || "Something went wrong. Please try again.");
