@@ -32,7 +32,7 @@ export async function POST(request) {
     const body = await request.json();
     const { mode, text, base64, mimeType } = body;
 
-    if (!GEMINI_API_KEY) {
+    if (!GEMINI_API_K) {
       return NextResponse.json(
         { error: "GEMINI_API environment variable is not set." },
         { status: 500 }
