@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 
 // ─── Gemini API helper ────────────────────────────────────────────────────────
-const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "AIzaSyByvqsKsxd7xEuomdc1mYlWz5MjM_tn0js";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 async function analyzeDocumentWithGemini(text) {
